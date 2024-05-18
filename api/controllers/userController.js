@@ -1,6 +1,6 @@
 const User = require("../models/User");
 const nodemailer = require("nodemailer");
-
+const crypto = require("crypto");
 //get All users
 
 const getAllUsers = async (req, res) => {
@@ -106,15 +106,15 @@ const makeAdmin = async (req, res) => {
 
 const sendMail = async (req, res) => {
   const { username, email, about } = req.body;
-  
+
   // Check if the user is authenticated
   if (!req.decoded) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
   const loggedInUserEmail = req.decoded.email;
-   // Assuming the user email is stored in req.decoded
-  console.log(loggedInUserEmail)
+  // Assuming the user email is stored in req.decoded
+  console.log(loggedInUserEmail);
   // Create a Nodemailer transporter
   let transporter = nodemailer.createTransport({
     service: "Gmail",
@@ -142,9 +142,48 @@ const sendMail = async (req, res) => {
   }
 };
 
+const generateResetToken = () => {
+  return crypto.randomBytes(20).toString("hex");
+};
 
+// Forgot password endpoint
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const oldUser = await User.findOne({ email });
+    if (!oldUser) {
+      return res.json({ status: "User Not Exists!!" });
+    }
+    const secret = process.env.ACCESS_TOKEN_SECRET + oldUser.password;
+    const token = jwt.sign({ email: oldUser.email, id: oldUser._id }, secret, {
+      expiresIn: "5m",
+    });
+    const link = `http://localhost:5000/reset-password/${oldUser._id}/${token}`;
+    var transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PWD,
+      },
+    });
 
+    var mailOptions = {
+      from: process.env.GMAIL_USER,
+      to: email,
+      subject: "Password Reset",
+      text: `Click this link to reset your password: ${link}`,
+    };
 
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        console.log(error);
+      } else {
+        console.log("Email sent: " + info.response);
+      }
+    });
+    console.log(link);
+  } catch (error) {}
+};
 
 module.exports = {
   getAllUsers,
@@ -154,4 +193,7 @@ module.exports = {
   makeAdmin,
   updateProfile,
   sendMail,
+  forgotPassword,
+  sendPasswordResetEmail,
+  generateResetToken,
 };
